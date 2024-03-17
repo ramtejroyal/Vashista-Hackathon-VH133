@@ -1,78 +1,92 @@
 # Vashista-Hackathon-VH133
 VH 133
-import time
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
+RF24 radio(9, 10); // CE, CSN
 
-class SmartHelmet:
-    def __init__(self):
-        self.temperature = 0
-        self.humidity = 0
-        self.gas_level = 0
-        self.battery_level = 100
-        self.location = (0, 0)
-        self.alert_triggered = False
+#include <Wire.h> // Include Wire library for I2C communication
+#include <Adafruit_Sensor.h>
+#include <Adafruit_ADXL345_U.h>
+// Initialize the ADXL345 sensor object
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
-    def update_sensors(self):
-        # Simulated sensor data update
-        self.temperature = self.read_temperature()
-        self.humidity = self.read_humidity()
-        self.gas_level = self.read_gas_level()
-        self.battery_level -= 1  # Simulate battery depletion
+int forcePin = A0;
+int forceValue = 0;
+int buzzerPin = 7;
 
-    def read_temperature(self):
-        # Simulated temperature reading
-        return 25  # Placeholder value
+const int mq135Pin = A1;
+int mq135Value = 0;
+int airQuality = 0;
 
-    def read_humidity(self):
-        # Simulated humidity reading
-        return 50  # Placeholder value
 
-    def read_gas_level(self):
-        # Simulated gas level reading
-        return 0.1  # Placeholder value
 
-    def send_data_to_server(self):
-        # Simulated data transmission to server
-        print("Sending sensor data to server...")
+const byte address[6] = "00014";
 
-    def check_battery_level(self):
-        if self.battery_level <= 10:
-            self.trigger_alert("Low battery level!")
+void setup() {
+  Serial.begin(9600);
+  radio.begin();
+  radio.setAutoAck(false);
+  radio.openWritingPipe(address);
+  radio.setPALevel(RF24_PA_MIN);
+  radio.stopListening();
 
-    def check_gas_level(self):
-        if self.gas_level > 0.05:  # Placeholder threshold
-            self.trigger_alert("High gas levels detected!")
+  pinMode(forcePin, INPUT);
+  pinMode(buzzerPin, OUTPUT);
 
-    def trigger_alert(self, message):
-        print("ALERT:", message)
-        self.alert_triggered = True
+  if (!accel.begin()) {
+    Serial.println("Could not initialize ADXL345 sensor");
+    while (1);
+  }
 
-    def update_location(self, new_location):
-        self.location = new_location
+  pinMode(mq135Pin, INPUT);
 
-    def display_data(self):
-        print("Temperature:", self.temperature)
-        print("Humidity:", self.humidity)
-        print("Gas Level:", self.gas_level)
-        print("Battery Level:", self.battery_level)
-        print("Location:", self.location)
+  //dht.begin();
+}
 
-# Instantiate the SmartHelmet object
-helmet = SmartHelmet()
+void loop() {
+  // Read force sensor value
+  forceValue = analogRead(forcePin);
+  Serial.print("Force Sensor: ");
+  Serial.println(forceValue);
 
-# Main loop
-while True:
-    # Update sensor data
-    helmet.update_sensors()
+  // Read MQ135 gas sensor value
+  mq135Value = analogRead(mq135Pin);
+  Serial.print("MQ135 Sensor: ");
+  Serial.println(mq135Value);
+ 
 
-    # Check conditions
-    helmet.check_battery_level()
-    helmet.check_gas_level()
+  // Read ADXL345 accelerometer values
+  sensors_event_t event;
+  accel.getEvent(&event);
+  Serial.print("X: ");
+  Serial.print(event.acceleration.x);
+  Serial.print(" m/s^2\tY: ");
+  Serial.print(event.acceleration.y);
+  Serial.print(" m/s^2\tZ: ");
+  Serial.print(event.acceleration.z);
+  Serial.println(" m/s^2");
 
-    # Send data to server
-    helmet.send_data_to_server()
+  // Read temperature and humidity using DHT11 sensor
+ 
 
-    # Display data on helmet display
-    helmet.display_data()
+  // Turn on buzzer if gas level is above threshold
+  if (airQuality > 50) {
+    digitalWrite(buzzerPin, HIGH);
+  } else {
+    digitalWrite(buzzerPin, LOW);
+  }
 
-    # Delay for simulation purposes
-    time.sleep(1)
+  // Send sensor data to receiver using NRF24L01 wireless module
+  radio.write(&forceValue, sizeof(forceValue));
+  radio.write(&mq135Value, sizeof(mq135Value));
+  radio.write(&airQuality, sizeof(airQuality));
+  radio.write(&event.acceleration.x, sizeof(event.acceleration.x));
+  radio.write(&event.acceleration.y, sizeof(event.acceleration.y));
+  radio.write(&event.acceleration.z, sizeof(event.acceleration.z));
+
+
+  delay(1000);
+}
+
+     
